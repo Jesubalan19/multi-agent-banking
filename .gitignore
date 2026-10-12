@@ -12,3 +12,5 @@ ENV/
 .idea/
 .vscode/
 *.log
+
+banking_sim.db
