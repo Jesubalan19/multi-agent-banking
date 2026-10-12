@@ -1,8 +1,8 @@
-# Multi-Agent Simulated Real-Time Banking Architecture 🏦
+# Multi-Agent Simulated Real-Time Banking Architecture (INR / ₹) 🏦
 
 An end-to-end, runnable Multi-Agent Banking Architecture designed for the **Wrench Wise EduTech AI/ML Internship Assignment**.
 
-This system demonstrates how a **Supervisor Orchestrator Agent** dynamically classifies customer queries in real-time, routes tasks to specialized domain agents, executes explainable financial tools, and provides complete execution traces for auditability.
+This system demonstrates how a **Supervisor Orchestrator Agent** dynamically classifies customer queries in real-time, routes tasks to specialized domain agents, executes explainable financial tools denominated in **Indian Rupees (INR / ₹)**, and provides complete execution traces for auditability.
 
 ---
 
@@ -10,52 +10,56 @@ This system demonstrates how a **Supervisor Orchestrator Agent** dynamically cla
 
 ```mermaid
 flowchart TD
-    User([Customer / Natural Language Request]) --> Supervisor[Supervisor / Orchestrator Agent]
+    User([Customer / Natural Language Request in INR]) --> Supervisor[1. Supervisor / Orchestrator Agent]
     
-    Supervisor -->|Intent Analysis & Routing| SubAgents{Specialized Agents}
+    Supervisor -->|Intent: CUSTOMER_BANKING| BankingAgent[2. Banking / Customer Agent]
+    Supervisor -->|Intent: FRAUD_DETECTION| RiskAgent[3. Risk / Fraud Agent]
+    Supervisor -->|Intent: LOAN_CREDIT| LoanAgent[4. Credit / Loan Agent]
+    Supervisor -->|Intent: GENERAL_FAQ| FaqAgent[5. General FAQ Agent]
     
-    SubAgents -->|Balance & Transactions| CustAgent[Banking / Customer Agent]
-    SubAgents -->|Security & Anomaly Detection| FraudAgent[Risk / Fraud Agent]
-    SubAgents -->|EMI Math & Underwriting| LoanAgent[Credit / Loan Agent]
-    SubAgents -->|Branch Info & Policies| FaqAgent[General FAQ Agent]
-    
-    CustAgent --> Tools[Banking Core Tools & SQLite DB]
-    FraudAgent --> Rules[Explainable Fraud Rules Engine]
-    LoanAgent --> Math[Deterministic EMI & DTI Underwriter]
-    FaqAgent --> KB[Banking Knowledge Base]
+    BankingAgent --> CoreDB[(SQLite Core Banking Store - INR)]
+    RiskAgent --> FraudRules[Explainable Fraud Rule Engine]
+    LoanAgent --> Underwriter[Reducing-Balance EMI Math & DTI Underwriter]
+    FaqAgent --> KnowledgeBase[Indian Banking Knowledge Base: IFSC, DICGC, UPI]
 
-    Tools --> Trace[Execution Trace & Audit Log]
-    Rules --> Trace
-    Math --> Trace
-    KB --> Trace
+    CoreDB --> Trace[Trace & Audit Pipeline]
+    FraudRules --> Trace
+    Underwriter --> Trace
+    KnowledgeBase --> Trace
 
-    Trace --> UI([Streamlit Banking Dashboard])
+    Trace --> UI([Streamlit Banking Dashboard - INR / ₹])
 ```
 
-### 1. Supervisor / Orchestrator Agent
-- Evaluates the incoming natural language query.
-- Identifies the user's intent (`CUSTOMER_BANKING`, `FRAUD_DETECTION`, `LOAN_CREDIT`, or `GENERAL_FAQ`).
+### 1. Currency & Number Formatting (INR / ₹)
+- All monetary amounts are formatted according to the **Indian numbering system** (e.g., `₹1,25,000.00`, `₹4,85,250.00`, `₹18,50,000.00`).
+- Terminology includes **Lakhs** and **Crores** (e.g. `₹4.85 Lakhs`, `₹18.50 Lakhs`).
+- No foreign currency symbols (`$`, `USD`) appear anywhere in the application.
+
+### 2. Supervisor / Orchestrator Agent
+- Evaluates incoming natural language queries (including Indian vocabulary like *"5 lakh loan"*, *"CIBIL score"*, *"UPI"*).
+- Identifies intent (`CUSTOMER_BANKING`, `FRAUD_DETECTION`, `LOAN_CREDIT`, or `GENERAL_FAQ`).
 - Emits an explainable routing rationale and records every step into the **Execution Trace**.
 
-### 2. Banking / Customer Agent
-- Connects to the simulated core banking database (`banking_sim.db`).
-- Returns real-time account balances, account status, and transaction histories.
+### 3. Banking / Customer Agent
+- Connects to the core banking database (`banking_sim.db`).
+- Returns real-time account balances, account status, and transaction histories in INR.
 
-### 3. Risk / Fraud Agent
-- Inspects transactions using multi-factor explainable rules:
-  - **High-Value Spike**: Transactions exceeding threshold ($3,000) or 50% of total funds.
-  - **Geo-Velocity / Location Discrepancy**: International transactions outside customer's registered home country.
-  - **High-Risk Channel**: Rapid large-denomination wire transfers or foreign ATM withdrawals.
+### 4. Risk / Fraud Agent
+- Inspects transactions against multi-factor explainable security rules:
+  - **High-Value Spike**: Transactions exceeding threshold (default `₹1,50,000.00`) or 50% of total funds.
+  - **Geo-Velocity / Location Discrepancy**: International transactions executed outside India.
+  - **High-Risk Channel**: Large overseas wire transfers or foreign ATM withdrawals.
 - Explains **why** each transaction was flagged.
 
-### 4. Credit / Loan Agent
-- **EMI Calculation**: Applies standard financial annuity formula:
+### 5. Credit / Loan Agent
+- **Reducing-Balance EMI Calculation**: Applies the standard financial reducing-balance formula:
   $$EMI = \frac{P \cdot r \cdot (1 + r)^n}{(1 + r)^n - 1}$$
-- **Underwriting Assessment**: Evaluates customer's Debt-to-Income (DTI) ratio against a 45% policy limit and reviews their credit score tier (Prime, Near-Prime, Subprime).
+- **Simulated Underwriting**: Evaluates customer's Fixed Obligation to Income Ratio (FOIR/DTI) against a 45% ceiling and checks CIBIL credit score tiers.
+- Clearly labels all assessments as a **Simulation**.
 
-### 5. AI Engine & Fallback Mechanism
-- Integrates with local **Ollama (Qwen 2.5 3B)** for natural language interpretation and conversational phrasing.
-- **Resilient Fallback Mode**: If Ollama is offline or not installed, the application falls back instantly to **100% Deterministic AI rules**. Python tools remain the single source of truth for all balances, fraud checks, and mathematical computations.
+### 6. AI Engine & Fallback Mechanism
+- Integrates with local **Ollama (Qwen 2.5 3B)** for natural language phrasing.
+- **Deterministic AI Fallback**: If Ollama is offline or not installed, the application automatically runs on **100% Deterministic AI rules** with zero downtime.
 
 ---
 
@@ -75,46 +79,48 @@ cd C:\Users\anton\.gemini\antigravity\scratch\multi_agent_banking
 pip install -r requirements.txt
 ```
 
-### Step 3: Run Unit & Integration Tests
-Run the pytest test suite to verify all agents, fraud rules, and math formulas:
+### Step 3: Run Unit & Integration Tests (5/5 Passing)
 ```powershell
-pytest tests/ -v
+python -m pytest tests/ -v
 ```
-*(All 5 test suites will pass)*
+
+Output:
+```text
+tests/test_agents.py::test_inr_formatting PASSED                         [ 20%]
+tests/test_agents.py::test_banking_tools_balance_and_transactions PASSED [ 40%]
+tests/test_agents.py::test_fraud_detection_explainable_rules PASSED      [ 60%]
+tests/test_agents.py::test_loan_emi_and_eligibility PASSED               [ 80%]
+tests/test_agents.py::test_supervisor_agent_routing_and_indian_nlp PASSED [100%]
+============================== 5 passed in 0.90s ==============================
+```
 
 ### Step 4: Launch the Streamlit Dashboard
 ```powershell
 streamlit run app.py
 ```
-The browser will automatically open at `http://localhost:8501`.
+Open your browser at `http://localhost:8501`.
 
 ---
 
-## 🤖 Optional: Running Local Ollama (Qwen 2.5 3B)
+## 👥 Synthetic Indian Customers (Seed Data)
 
-If you have Ollama installed and want to test local LLM phrasing:
-1. Download Ollama from [ollama.com](https://ollama.com).
-2. Pull the model:
-   ```powershell
-   ollama pull qwen2.5:3b
-   ```
-3. Run the Ollama server:
-   ```powershell
-   ollama serve
-   ```
-4. Reload the Streamlit app. The status badge will change to **Local LLM Active (qwen2.5:3b)**.
-*(Note: If Ollama is not installed or turned off, the app automatically runs in Deterministic AI mode with full functionality.)*
+1. **Aarav Sharma (`CUST101`)**:
+   - **Account**: `ACC-982104` (Savings Account)
+   - **Balance**: `₹4,85,250.00` (`₹4.85 Lakhs`)
+   - **Monthly Income**: `₹85,000.00` | **CIBIL Score**: 765 (Prime)
+   - **Security Flags**: 2 suspicious overseas transactions (₹3,50,000 wire to Ukraine, ₹45,000 Lisbon ATM withdrawal).
 
----
+2. **Priya Patel (`CUST102`)**:
+   - **Account**: `ACC-441209` (Salary Account)
+   - **Balance**: `₹92,400.00`
+   - **Monthly Income**: `₹45,000.00` | **CIBIL Score**: 640 (Fair)
+   - **Security Flags**: 1 suspicious electronics purchase in Tokyo (₹78,000.00, consuming >70% of balance).
 
-## 🧪 Automated Pytest Test Suite
-
-The test suite in `tests/test_agents.py` covers:
-1. **test_banking_tools_balance_and_transactions**: Factual balance lookup and transaction history.
-2. **test_fraud_detection_explainable_rules**: Multi-factor explainable rule triggering for suspicious activity.
-3. **test_loan_emi_and_eligibility**: Mathematical accuracy of annuity EMI formula and DTI underwriting tiers.
-4. **test_supervisor_agent_routing**: Routing accuracy across all 4 intent categories.
-5. **test_execution_trace_and_fallback_resilience**: Full trace completeness and zero-downtime offline execution.
+3. **Vikram Malhotra (`CUST103`)**:
+   - **Account**: `ACC-110943` (Wealth Privilege)
+   - **Balance**: `₹18,50,000.00` (`₹18.50 Lakhs`)
+   - **Monthly Income**: `₹2,10,000.00` | **CIBIL Score**: 790 (Prime)
+   - **Security Flags**: Clean record.
 
 ---
 
@@ -123,15 +129,15 @@ The test suite in `tests/test_agents.py` covers:
 ```
 multi_agent_banking/
 │
-├── app.py                # Streamlit interactive banking dashboard
+├── app.py                # Streamlit interactive banking dashboard (INR / ₹)
 ├── agents.py             # Supervisor and specialized domain agents
-├── banking_tools.py      # Core deterministic tools (balance, fraud rules, EMI)
-├── database.py           # SQLite synthetic data store and seeder
+├── banking_tools.py      # Core deterministic tools (format_inr, fraud rules, EMI)
+├── database.py           # SQLite synthetic Indian banking database
 ├── requirements.txt      # Project dependencies
 ├── README.md             # Architecture, demo script, and documentation
-├── .gitignore            # Git ignore file
+├── .gitignore            # Git ignore configuration
 └── tests/
-    └── test_agents.py    # Pytest automated test suite
+    └── test_agents.py    # Pytest automated test suite (INR validation)
 ```
 
 ---
@@ -139,25 +145,29 @@ multi_agent_banking/
 ## 🎤 5-Minute Interview Demo Script
 
 1. **Minute 1: Introduction & Architecture Overview**
-   - *"Hello, this project is a Multi-Agent Banking Architecture simulating real-time retail banking operations."*
-   - *"We use a Supervisor Agent that orchestrates three specialized agents: Banking, Risk/Fraud, and Credit/Loan."*
-   - *"A key design principle is separation of concerns: Python tools provide factual mathematical calculations and security rules, while the AI layer handles natural language routing and conversational summarization."*
+   - *"Hello, this project is a Multi-Agent Banking Architecture simulating real-time Indian retail banking operations in Indian Rupees (₹)."*
+   - *"We use a Supervisor Agent that orchestrates domain agents: Banking, Risk/Fraud, and Credit/Loan."*
+   - *"All financial calculations, reducing-balance EMI math, and fraud detection rules are executed deterministically in Python using the Indian numbering system (Lakhs and Crores), while the AI layer handles natural language interpretation."*
 
 2. **Minute 2: Supervisor Routing & Balance Check**
-   - Show the KPI cards for customer Alex Rivera.
-   - Click **"Check Balance"** or type *"What is my current balance?"*.
-   - Point out the **🔍 Orchestration Trace**: explain how the Supervisor classified the intent, routed to the Banking/Customer Agent, and retrieved the exact balance of `$14,250.75` from SQLite.
+   - Show the KPI cards for customer **Aarav Sharma** (Balance: `₹4,85,250.00`, Income: `₹85,000.00`, CIBIL: 765).
+   - Click **"💰 Check Balance"** or type *"What is my account balance in Rupees?"*.
+   - Point out the **🔍 Orchestration Trace**: explain how the Supervisor classified the intent as `CUSTOMER_BANKING`, routed to the Banking Agent, and retrieved the exact balance from SQLite.
 
 3. **Minute 3: Explainable Risk & Fraud Surveillance**
-   - Click **"Audit For Fraud"** or type *"Has there been any weird activity on my card?"*.
-   - Show how the **Risk/Fraud Agent** flags the $9,200 wire transfer to Ukraine and the $1,500 Lisbon ATM withdrawal.
-   - Highlight the **explainability**: It doesn't just output a black-box score; it clearly explains that both the High-Value threshold and Location Mismatch rules were triggered.
+   - Click **"🚨 Audit For Fraud"** or type *"Check my account for any suspicious transactions or fraud flags"*.
+   - Show the flagged transactions:
+     - **Apex Global Offshore Capital (`₹3,50,000.00`)**: Flagged for *High-Value Spike* (>= ₹1,50,000 threshold) and *Location Mismatch* (Kyiv, Ukraine vs registered home country India).
+     - **Euronet Lisbon ATM (`₹45,000.00`)**: Flagged for *Overseas ATM withdrawal*.
+   - Emphasize: *"Notice the full explainability: every flagged alert details the exact rules triggered."*
 
 4. **Minute 4: Credit & Loan Underwriting Simulator**
-   - Switch to the **🧮 Loan & EMI Calculator** tab or type *"Can I get a $15,000 loan for 3 years at 9%?"*.
-   - Explain the standard financial EMI formula ($477.00/mo).
-   - Point out the automated underwriting decision: Alex has a 745 credit score and 6.4% DTI ratio, so the loan is **APPROVED**.
+   - Switch to the **🧮 Interactive Loan & EMI Calculator** tab or type *"Can I qualify for a 5 lakh personal loan for 3 years at 9.5%?"*.
+   - Explain the reducing-balance EMI formula result:
+     $$\text{Monthly EMI} = ₹16,016.47 \quad | \quad \text{Total Interest} = ₹76,593.10$$
+   - Point out the automated underwriting decision:
+     - Aarav has a 765 CIBIL score and an 18.8% FOIR/DTI ratio, so the loan is **APPROVED (Simulated)**.
 
-5. **Minute 5: Resilience & Fallback Demonstration**
-   - Point to the AI Engine Status badge.
-   - Explain: *"If Ollama with Qwen 2.5 3B is running, it phrases responses naturally. But if Ollama is offline, the system seamlessly transitions to our Deterministic AI engine without crashing or using placeholder data. All unit tests pass with zero external dependencies."*
+5. **Minute 5: Resilience & Local LLM Integration**
+   - Point to the **AI Engine Status** badge in the sidebar:
+     - Explain: *"The system integrates with local Ollama Qwen 2.5 3B. However, if Ollama is offline or not installed, the application seamlessly runs on our 100% Deterministic AI fallback mode without crashing, faking execution, or inventing financial numbers. All 5 pytest suites run completely offline in under 1 second."*

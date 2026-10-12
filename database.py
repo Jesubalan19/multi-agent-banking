@@ -1,6 +1,6 @@
 """
-database.py - SQLite-based Simulated Core Banking Data Store.
-Provides synthetic customer, account, and transaction records for the banking simulation.
+database.py - SQLite-based Simulated Core Banking Data Store (INR / Indian Banking).
+Provides synthetic customer, account, and transaction records denominated in Indian Rupees (₹).
 Zero external credentials or real banking APIs required.
 """
 
@@ -22,13 +22,16 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
 
 def init_db(db_path: Optional[str] = None, force_reset: bool = False) -> str:
     """
-    Initialize SQLite database tables and seed with realistic synthetic banking records.
-    Safe to call multiple times (idempotent unless force_reset is True).
+    Initialize SQLite database tables and seed with realistic synthetic Indian banking records.
+    Automatically migrates legacy USD databases to INR.
     """
     path = db_path or DEFAULT_DB_PATH
-    
+
     if force_reset and os.path.exists(path):
-        os.remove(path)
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
     conn = get_connection(path)
     cursor = conn.cursor()
@@ -54,7 +57,7 @@ def init_db(db_path: Optional[str] = None, force_reset: bool = False) -> str:
             customer_id TEXT NOT NULL,
             account_type TEXT NOT NULL,
             balance REAL NOT NULL,
-            currency TEXT DEFAULT 'USD',
+            currency TEXT DEFAULT 'INR',
             status TEXT DEFAULT 'ACTIVE',
             FOREIGN KEY (customer_id) REFERENCES customers (customer_id)
         )
@@ -78,48 +81,60 @@ def init_db(db_path: Optional[str] = None, force_reset: bool = False) -> str:
 
     conn.commit()
 
-    # Check if seed data exists
+    # Detect legacy USD data or empty database to perform safe migration/reseed
     cursor.execute("SELECT COUNT(*) FROM customers")
-    if cursor.fetchone()[0] == 0:
-        _seed_synthetic_data(cursor)
+    cust_count = cursor.fetchone()[0]
+
+    needs_reseed = cust_count == 0
+    if not needs_reseed:
+        cursor.execute("SELECT currency FROM accounts LIMIT 1")
+        row = cursor.fetchone()
+        if row and row["currency"] != "INR":
+            needs_reseed = True
+
+    if needs_reseed or force_reset:
+        cursor.execute("DELETE FROM transactions")
+        cursor.execute("DELETE FROM accounts")
+        cursor.execute("DELETE FROM customers")
+        _seed_synthetic_inr_data(cursor)
         conn.commit()
 
     conn.close()
     return path
 
 
-def _seed_synthetic_data(cursor: sqlite3.Cursor):
-    """Populate realistic synthetic customers, accounts, and transactions."""
+def _seed_synthetic_inr_data(cursor: sqlite3.Cursor):
+    """Populate realistic synthetic Indian customers, accounts, and transactions in INR (₹)."""
     now = datetime.now()
 
-    # Seed Customers
+    # Seed Indian Customers
     customers = [
         (
             "CUST101",
-            "Alex Rivera",
-            "alex.rivera@syntheticbank.com",
-            "+1-555-019-2831",
-            745,
-            7500.0,
-            "United States",
+            "Aarav Sharma",
+            "aarav.sharma@syntheticbank.in",
+            "+91-98201-92831",
+            765,
+            85000.0,  # ₹85,000 / month
+            "India",
         ),
         (
             "CUST102",
-            "Priya Sharma",
-            "priya.sharma@syntheticbank.com",
-            "+1-555-014-9921",
-            630,
-            3500.0,
-            "United States",
+            "Priya Patel",
+            "priya.patel@syntheticbank.in",
+            "+91-98765-43210",
+            640,
+            45000.0,  # ₹45,000 / month
+            "India",
         ),
         (
             "CUST103",
-            "Marcus Vance",
-            "marcus.vance@syntheticbank.com",
-            "+1-555-018-4432",
+            "Vikram Malhotra",
+            "vikram.malhotra@syntheticbank.in",
+            "+91-99887-76655",
             790,
-            11000.0,
-            "United States",
+            210000.0,  # ₹2,10,000 / month
+            "India",
         ),
     ]
     cursor.executemany(
@@ -130,11 +145,11 @@ def _seed_synthetic_data(cursor: sqlite3.Cursor):
         customers,
     )
 
-    # Seed Accounts
+    # Seed Accounts (in INR)
     accounts = [
-        ("ACC-982104", "CUST101", "Checking", 14250.75, "USD", "ACTIVE"),
-        ("ACC-441209", "CUST102", "Savings", 4820.00, "USD", "ACTIVE"),
-        ("ACC-110943", "CUST103", "Premier Checking", 28900.00, "USD", "ACTIVE"),
+        ("ACC-982104", "CUST101", "Savings Account", 485250.00, "INR", "ACTIVE"),  # ₹4,85,250.00
+        ("ACC-441209", "CUST102", "Salary Account", 92400.00, "INR", "ACTIVE"),    # ₹92,400.00
+        ("ACC-110943", "CUST103", "Wealth Privilege", 1850000.00, "INR", "ACTIVE"), # ₹18,50,000.00 (₹18.5 Lakhs)
     ]
     cursor.executemany(
         """
@@ -144,155 +159,155 @@ def _seed_synthetic_data(cursor: sqlite3.Cursor):
         accounts,
     )
 
-    # Helper for relative timestamps
+    # Relative timestamp helper
     def fmt_time(hours_ago: int) -> str:
         return (now - timedelta(hours=hours_ago)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # Seed Transactions (Includes deliberate normal & fraudulent patterns)
+    # Seed Transactions in INR (Normal daily expenses & deliberate explainable suspicious patterns)
     transactions = [
-        # Customer 1 (Alex Rivera: ACC-982104)
+        # Customer 1 (Aarav Sharma: ACC-982104, Balance: ₹4,85,250)
         (
             "TXN-1001",
             "ACC-982104",
             fmt_time(2),
-            "Whole Foods Market",
-            84.50,
-            "Groceries",
-            "New York, United States",
+            "Swiggy Food Delivery",
+            640.00,
+            "Dining",
+            "Mumbai, India",
             0,
             None,
         ),
         (
             "TXN-1002",
             "ACC-982104",
-            fmt_time(5),
-            "Blue Bottle Coffee",
-            12.75,
-            "Dining",
-            "New York, United States",
+            fmt_time(6),
+            "Reliance Smart Bazaar",
+            3450.00,
+            "Groceries",
+            "Mumbai, India",
             0,
             None,
         ),
         (
             "TXN-1003",
             "ACC-982104",
-            fmt_time(14),
-            "Shell Gas Station",
-            62.00,
-            "Transportation",
-            "Jersey City, United States",
+            fmt_time(15),
+            "Indian Oil Fuel Station",
+            2100.00,
+            "Fuel & Transportation",
+            "Navi Mumbai, India",
             0,
             None,
         ),
         (
             "TXN-1004",
             "ACC-982104",
-            fmt_time(20),
-            "Apex Offshore Holdings",
-            9200.00,
-            "Wire Transfer",
+            fmt_time(22),
+            "Apex Global Offshore Capital",
+            350000.00,
+            "International Wire",
             "Kyiv, Ukraine",
             1,
-            "High-value overseas wire transfer exceeding normal baseline.",
+            "High-value overseas wire transfer of ₹3,50,000.00 exceeding baseline threshold and country discrepancy.",
         ),
         (
             "TXN-1005",
             "ACC-982104",
-            fmt_time(36),
+            fmt_time(38),
             "Euronet Lisbon ATM",
-            1500.00,
+            45000.00,
             "Cash Withdrawal",
             "Lisbon, Portugal",
             1,
-            "Foreign ATM withdrawal detected outside registered country.",
+            "Foreign ATM withdrawal of ₹45,000.00 detected outside registered country (India).",
         ),
         (
             "TXN-1006",
             "ACC-982104",
-            fmt_time(50),
-            "Netflix Subscription",
-            19.99,
+            fmt_time(52),
+            "Netflix India Subscription",
+            649.00,
             "Entertainment",
-            "Online, United States",
+            "Online, India",
             0,
             None,
         ),
-        # Customer 2 (Priya Sharma: ACC-441209)
+        # Customer 2 (Priya Patel: ACC-441209, Balance: ₹92,400)
         (
             "TXN-2001",
             "ACC-441209",
             fmt_time(1),
-            "CVS Pharmacy",
-            34.20,
-            "Health",
-            "San Jose, United States",
+            "DMart Supermarket",
+            2850.00,
+            "Groceries",
+            "Bengaluru, India",
             0,
             None,
         ),
         (
             "TXN-2002",
             "ACC-441209",
-            fmt_time(4),
-            "Trader Joe's",
-            78.60,
-            "Groceries",
-            "San Jose, United States",
+            fmt_time(5),
+            "Apollo Pharmacy",
+            680.00,
+            "Healthcare",
+            "Bengaluru, India",
             0,
             None,
         ),
         (
             "TXN-2003",
             "ACC-441209",
-            fmt_time(9),
+            fmt_time(11),
             "Tokyo Ginza Gadgets",
-            3600.00,
+            78000.00,
             "Electronics",
             "Tokyo, Japan",
             1,
-            "Transaction amount ($3,600) consumes >70% of total balance with foreign IP/location.",
+            "Transaction amount (₹78,000.00) consumes >70% of total balance with foreign IP/location.",
         ),
         (
             "TXN-2004",
             "ACC-441209",
-            fmt_time(28),
-            "Uber Rides",
-            24.50,
-            "Transportation",
-            "San Jose, United States",
+            fmt_time(29),
+            "Namma Metro Smart Card",
+            500.00,
+            "Transit",
+            "Bengaluru, India",
             0,
             None,
         ),
-        # Customer 3 (Marcus Vance: ACC-110943)
+        # Customer 3 (Vikram Malhotra: ACC-110943, Balance: ₹18,50,000)
         (
             "TXN-3001",
             "ACC-110943",
-            fmt_time(3),
-            "Equinox Fitness Club",
-            280.00,
-            "Health & Fitness",
-            "New York, United States",
+            fmt_time(4),
+            "Taj Lands End Mumbai",
+            8500.00,
+            "Dining & Hospitality",
+            "Mumbai, India",
             0,
             None,
         ),
         (
             "TXN-3002",
             "ACC-110943",
-            fmt_time(12),
-            "Delta Air Lines",
-            650.00,
+            fmt_time(14),
+            "MakeMyTrip Air Ticket",
+            24500.00,
             "Travel",
-            "Atlanta, United States",
+            "New Delhi, India",
             0,
             None,
         ),
         (
             "TXN-3003",
             "ACC-110943",
-            fmt_time(22),
-            "Apple Store 5th Ave",
-            1299.00,
-            "Electronics",
-            "New York, United States",
+            fmt_time(24),
+            "Tanishq Jewellery",
+            65000.00,
+            "Shopping",
+            "Mumbai, India",
             0,
             None,
         ),
@@ -413,6 +428,6 @@ def get_flagged_transactions(account_number: Optional[str] = None, db_path: Opti
 
 if __name__ == "__main__":
     db_file = init_db(force_reset=True)
-    print(f"Database successfully initialized at: {db_file}")
+    print(f"Database successfully re-initialized with INR records at: {db_file}")
     customers = get_all_customers()
-    print(f"Loaded {len(customers)} synthetic customers.")
+    print(f"Loaded {len(customers)} synthetic Indian customers.")

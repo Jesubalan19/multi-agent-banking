@@ -1,14 +1,14 @@
 """
-agents.py - Multi-Agent Architecture for Real-Time Banking Simulation.
+agents.py - Multi-Agent Architecture for Real-Time Indian Banking Simulation (INR / ₹).
 Implements:
 1. Supervisor/Orchestrator Agent (Routing & Execution Trace)
-2. Banking/Customer Agent (Balances & Transaction History)
-3. Risk/Fraud Agent (Explainable Rule-Based Fraud Detection)
-4. Credit/Loan Agent (EMI Calculation & Loan Eligibility Underwriting)
-5. General FAQ Agent (Retail Banking Knowledge)
+2. Banking/Customer Agent (INR Balances & Transaction History)
+3. Risk/Fraud Agent (Explainable Indian Banking Surveillance & Location Anomaly Rules)
+4. Credit/Loan Agent (Reducing-Balance EMI Math & DTI Underwriting Simulation in INR)
+5. General FAQ Agent (Indian Retail Banking Knowledge: IFSC, DICGC, UPI)
 
 Supports local LLM (Ollama Qwen 2.5 3B) when online, and automatically
-falls back to deterministic AI with full functionality and zero downtime.
+falls back to deterministic AI with full INR functionality and zero downtime.
 """
 
 import re
@@ -17,6 +17,7 @@ import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
 import banking_tools
+from banking_tools import format_inr, format_inr_lakh_crore
 import database
 
 # Configuration
@@ -45,11 +46,9 @@ def check_ollama_availability(timeout: float = 0.2) -> Dict[str, Any]:
             "message": "Ollama local service is offline or not installed. Running on 100% Deterministic AI rules."
         }
 
-    # If socket is open, verify ollama library can list models
     try:
         import ollama
         models_response = ollama.list()
-        # models can be dict or objects depending on ollama version
         model_names = []
         if isinstance(models_response, dict) and "models" in models_response:
             model_names = [m.get("name", "") for m in models_response["models"]]
@@ -63,7 +62,7 @@ def check_ollama_availability(timeout: float = 0.2) -> Dict[str, Any]:
                 "available": True,
                 "model": selected_model,
                 "mode": "Local LLM Active",
-                "message": f"Connected to Ollama ({selected_model}). AI phrasing active."
+                "message": f"Connected to Ollama ({selected_model}). AI phrasing in INR active."
             }
         else:
             return {
@@ -107,24 +106,30 @@ def _call_ollama(prompt: str, system_prompt: str, model_name: str) -> Optional[s
 # ==============================================================================
 
 class CustomerBankingAgent:
-    """Specialized Agent for customer balance and transaction inquiries."""
+    """Specialized Agent for customer balance and transaction inquiries in INR."""
     name = "Banking/Customer Agent"
-    description = "Handles account balance checks, customer verification, and transaction history."
+    description = "Handles account balance checks, customer verification, and transaction history in INR."
 
     def execute(self, query: str, account_number: str, customer_info: Dict[str, Any], llm_status: Dict[str, Any]) -> Dict[str, Any]:
         trace_steps = []
         trace_steps.append(f"Customer Agent activated for account {account_number}.")
 
         q_lower = query.lower()
-        is_transaction_query = any(k in q_lower for k in ["transaction", "history", "statement", "activity", "spent", "purchases"])
+        is_transaction_query = any(k in q_lower for k in [
+            "transaction", "history", "statement", "activity", "spent", "purchases", "passbook", "upi"
+        ])
 
         if is_transaction_query:
-            trace_steps.append("Invoking banking_tools.get_transaction_history(limit=5).")
+            trace_steps.append("Invoking banking_tools.get_transaction_history(limit=5) in INR.")
             tool_res = banking_tools.get_transaction_history(account_number, limit=5)
-            
-            # Phrasing
+
             if llm_status["available"] and llm_status["model"]:
-                system_prompt = "You are a professional banking assistant. Summarize the customer's recent transactions politely and concisely."
+                system_prompt = (
+                    "You are a professional banking assistant for an Indian retail bank. "
+                    "Summarize the customer's recent transactions politely and concisely. "
+                    "Always use Indian Rupees (₹) with Indian number formatting (e.g. ₹1,25,000.00). "
+                    "Never use USD or $ symbol."
+                )
                 prompt = f"Customer Name: {customer_info['name']}\nTransactions: {tool_res['transactions']}\nOriginal Query: {query}"
                 llm_narrative = _call_ollama(prompt, system_prompt, llm_status["model"])
                 response_text = llm_narrative or self._deterministic_tx_summary(customer_info, tool_res)
@@ -134,16 +139,22 @@ class CustomerBankingAgent:
             return {
                 "agent": self.name,
                 "action": "transaction_history",
+                "currency": "INR",
                 "tool_data": tool_res,
                 "response_text": response_text,
                 "trace_steps": trace_steps,
             }
         else:
-            trace_steps.append("Invoking banking_tools.check_balance().")
+            trace_steps.append("Invoking banking_tools.check_balance() in INR.")
             tool_res = banking_tools.check_balance(account_number)
 
             if llm_status["available"] and llm_status["model"]:
-                system_prompt = "You are a professional banking assistant. State the customer's balance and status politely."
+                system_prompt = (
+                    "You are a professional banking assistant for an Indian retail bank. "
+                    "State the customer's balance and status politely. "
+                    "Always display amounts in Indian Rupees (₹) with Indian number formatting (e.g., ₹4,85,250.00). "
+                    "Never use USD or $ symbol."
+                )
                 prompt = f"Customer: {customer_info['name']}\nAccount: {tool_res}\nQuery: {query}"
                 llm_narrative = _call_ollama(prompt, system_prompt, llm_status["model"])
                 response_text = llm_narrative or self._deterministic_balance_summary(customer_info, tool_res)
@@ -153,36 +164,42 @@ class CustomerBankingAgent:
             return {
                 "agent": self.name,
                 "action": "balance_check",
+                "currency": "INR",
                 "tool_data": tool_res,
                 "response_text": response_text,
                 "trace_steps": trace_steps,
             }
 
     def _deterministic_balance_summary(self, customer: Dict[str, Any], data: Dict[str, Any]) -> str:
+        words = data.get("formatted_balance_words", "")
+        desc = f" ({words})" if words else ""
         return (
-            f"Hello {customer['name']}, your current balance for {data['account_type']} account "
-            f"({data['account_number']}) is **{data['formatted_balance']}**. "
+            f"Hello {customer['name']}, your current balance for {data['account_type']} "
+            f"({data['account_number']}) is **{data['formatted_balance']}**{desc}. "
             f"Your account status is currently **{data['status']}**."
         )
 
     def _deterministic_tx_summary(self, customer: Dict[str, Any], data: Dict[str, Any]) -> str:
         count = data["count"]
-        lines = [f"Here are the recent {count} transactions for account {data['account_number']}:"]
+        lines = [f"Here are the recent {count} transactions for account {data['account_number']} (in INR):"]
         for idx, t in enumerate(data["transactions"], 1):
             flag_marker = " ⚠️ [FLAGGED]" if t["is_flagged"] else ""
-            lines.append(f"{idx}. **{t['timestamp'][:10]}**: ${t['amount']:,.2f} at *{t['merchant']}* ({t['category']}) in {t['location']}{flag_marker}")
+            lines.append(
+                f"{idx}. **{t['timestamp'][:10]}**: {t['formatted_amount']} at *{t['merchant']}* ({t['category']}) "
+                f"in {t['location']}{flag_marker}"
+            )
         return "\n".join(lines)
 
 
 class RiskFraudAgent:
-    """Specialized Agent for transaction surveillance, pattern detection, and explainable fraud rules."""
+    """Specialized Agent for transaction surveillance, pattern detection, and explainable fraud rules in INR."""
     name = "Risk/Fraud Agent"
-    description = "Inspects transactions against multi-factor explainability rules to protect account security."
+    description = "Inspects transactions against explainable security rules in INR to safeguard Indian accounts."
 
     def execute(self, query: str, account_number: str, customer_info: Dict[str, Any], llm_status: Dict[str, Any]) -> Dict[str, Any]:
         trace_steps = []
-        trace_steps.append(f"Risk/Fraud Agent initialized security surveillance for account {account_number}.")
-        trace_steps.append("Invoking banking_tools.inspect_transactions_for_fraud() with explainable rule sets.")
+        trace_steps.append(f"Risk/Fraud Agent initialized surveillance for account {account_number}.")
+        trace_steps.append("Invoking banking_tools.inspect_transactions_for_fraud() with INR rule sets.")
 
         tool_res = banking_tools.inspect_transactions_for_fraud(account_number)
         flagged_count = tool_res["flagged_count"]
@@ -190,8 +207,9 @@ class RiskFraudAgent:
 
         if llm_status["available"] and llm_status["model"]:
             system_prompt = (
-                "You are an AI Bank Security & Fraud Investigation Officer. Explain the security evaluation clearly, "
-                "mentioning each flagged transaction and the specific security rules that caught it."
+                "You are an AI Bank Security Officer for an Indian bank. Explain the security evaluation clearly. "
+                "Always express currency in Indian Rupees (₹) with Indian digit formatting (e.g. ₹3,50,000.00). "
+                "Never use $ or USD. Explain each triggered rule exactly as reported by the tools."
             )
             prompt = f"Customer: {customer_info['name']}\nEvaluation Data: {tool_res}\nQuery: {query}"
             llm_narrative = _call_ollama(prompt, system_prompt, llm_status["model"])
@@ -202,6 +220,7 @@ class RiskFraudAgent:
         return {
             "agent": self.name,
             "action": "fraud_inspection",
+            "currency": "INR",
             "tool_data": tool_res,
             "response_text": response_text,
             "trace_steps": trace_steps,
@@ -212,7 +231,7 @@ class RiskFraudAgent:
             return (
                 f"🛡️ **Security Audit Complete**: All {data['total_evaluated']} recent transactions "
                 f"for account {data['account_number']} conform to your typical spending patterns. "
-                f"No suspicious activity or geo-velocity anomalies detected."
+                f"No suspicious spikes or geo-velocity anomalies outside India detected."
             )
 
         report = [
@@ -225,33 +244,34 @@ class RiskFraudAgent:
                 f"  - *Location*: {item['location']} | *Date*: {item['timestamp']}\n"
                 f"  - *Reason*: {item['explanation']}"
             )
-        report.append("\n💡 *Action Recommended*: Review these transactions. You can freeze your card or dispute unrecognized charges.")
+        report.append("\n💡 *Action Recommended*: Review these transactions immediately. You can freeze your debit card or lock UPI access.")
         return "\n".join(report)
 
 
 class CreditLoanAgent:
-    """Specialized Agent for calculating loan EMIs and underwriting eligibility."""
+    """Specialized Agent for calculating reducing-balance loan EMIs and underwriting in INR."""
     name = "Credit/Loan Agent"
-    description = "Calculates monthly EMI commitments and evaluates creditworthiness using Debt-To-Income (DTI) metrics."
+    description = "Calculates monthly EMI in INR and evaluates simulated credit eligibility using FOIR/DTI ratios."
 
     def execute(self, query: str, account_number: str, customer_info: Dict[str, Any], llm_status: Dict[str, Any]) -> Dict[str, Any]:
         trace_steps = []
         trace_steps.append(f"Credit/Loan Agent activated for customer {customer_info['name']}.")
 
-        # Parse loan parameters from user query or sensible defaults
         principal, interest_rate, tenure_months = self._parse_loan_parameters(query)
-        trace_steps.append(f"Extracted loan parameters: Principal=${principal:,.2f}, Interest={interest_rate}%, Tenure={tenure_months}mo.")
+        trace_steps.append(
+            f"Extracted loan parameters: Principal={format_inr(principal)}, Interest={interest_rate}%, Tenure={tenure_months}mo."
+        )
 
-        # Always compute factual EMI using the deterministic formula
         emi_data = banking_tools.calculate_loan_emi(principal, interest_rate, tenure_months)
-        trace_steps.append(f"Calculated standard EMI: ${emi_data['monthly_emi']:,.2f}/month.")
+        trace_steps.append(f"Calculated reducing-balance EMI: {emi_data['formatted_emi']}/month.")
 
-        # Determine if eligibility check is requested
-        is_eligibility_query = any(k in query.lower() for k in ["eligible", "eligibility", "qualify", "can i get", "apply", "approved"])
+        is_eligibility_query = any(k in query.lower() for k in [
+            "eligible", "eligibility", "qualify", "can i get", "apply", "approved", "cibil"
+        ])
         eligibility_data = None
 
         if is_eligibility_query or "loan" in query.lower():
-            trace_steps.append("Executing underwriting check: banking_tools.evaluate_loan_eligibility().")
+            trace_steps.append("Executing simulated underwriting check: banking_tools.evaluate_loan_eligibility().")
             eligibility_data = banking_tools.evaluate_loan_eligibility(
                 monthly_income=customer_info["monthly_income"],
                 credit_score=customer_info["credit_score"],
@@ -259,7 +279,7 @@ class CreditLoanAgent:
                 tenure_months=tenure_months,
                 annual_interest_rate=interest_rate
             )
-            trace_steps.append(f"Eligibility decision: {eligibility_data['status']} (DTI: {eligibility_data['dti_ratio']}%).")
+            trace_steps.append(f"Simulated eligibility decision: {eligibility_data['status']} (FOIR/DTI: {eligibility_data['dti_ratio']}%).")
 
         tool_data = {
             "emi_calculation": emi_data,
@@ -272,8 +292,10 @@ class CreditLoanAgent:
 
         if llm_status["available"] and llm_status["model"]:
             system_prompt = (
-                "You are an AI Banking Loan Officer. Present the EMI calculation and loan eligibility assessment clearly, "
-                "explaining the Debt-To-Income (DTI) ratio and credit score rationale."
+                "You are an AI Banking Loan Officer in India. Present the EMI calculation and simulated eligibility assessment clearly. "
+                "Always express currency in Indian Rupees (₹) with Indian digit formatting (e.g. ₹15,000.00, ₹5,00,000.00). "
+                "Never use USD or $. Never alter calculated numbers returned by the tools. "
+                "Clearly label the result as a simulation."
             )
             prompt = f"Customer Profile: {customer_info}\nLoan & Eligibility Data: {tool_data}\nQuery: {query}"
             llm_narrative = _call_ollama(prompt, system_prompt, llm_status["model"])
@@ -284,28 +306,44 @@ class CreditLoanAgent:
         return {
             "agent": self.name,
             "action": "loan_analysis",
+            "currency": "INR",
             "tool_data": tool_data,
             "response_text": response_text,
             "trace_steps": trace_steps,
         }
 
     def _parse_loan_parameters(self, query: str) -> Tuple[float, float, int]:
-        """Extract principal amount, interest, and tenure from natural language string."""
+        """Extract principal amount in INR, interest rate, and tenure from natural language string."""
         q = query.lower()
 
-        # Look for principal amount ($10,000, 10000, 25k, etc.)
-        principal = 10000.0  # Default
-        amt_match = re.search(r'\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\s*(?:k|thousand))?', q)
-        if amt_match:
-            raw_val = amt_match.group(1).replace(",", "")
-            val = float(raw_val)
-            if "k" in amt_match.group(0).lower() or "thousand" in amt_match.group(0).lower():
-                val *= 1000
-            if val >= 500:  # Avoid matching small tenure or percentage numbers as principal
-                principal = val
+        # Default principal in INR: ₹5,00,000 (5 Lakhs)
+        principal = 500000.0
 
-        # Look for tenure (e.g., 24 months, 2 years, 36 months, 3 years)
-        tenure = 24  # Default 24 months
+        # 1. Match Indian Crore notation (e.g., "1 crore", "1.5 cr", "2 crores")
+        cr_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:cr|crore|crores)', q)
+        if cr_match:
+            principal = float(cr_match.group(1)) * 10000000.0
+        else:
+            # 2. Match Indian Lakh notation (e.g., "5 lakh", "5.5 lakhs", "10 lac", "2 lacs")
+            lakh_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs)', q)
+            if lakh_match:
+                principal = float(lakh_match.group(1)) * 100000.0
+            else:
+                # 3. Match explicit rupee amounts (₹1,50,000 or 500000 or 50k)
+                amt_match = re.search(r'(?:₹|rs\.?|inr)?\s*(\d{1,3}(?:,\d{2,3})+|\d+)(?:\s*(?:k|thousand))?', q)
+                if amt_match:
+                    raw_val = amt_match.group(1).replace(",", "")
+                    try:
+                        val = float(raw_val)
+                        if "k" in amt_match.group(0).lower() or "thousand" in amt_match.group(0).lower():
+                            val *= 1000.0
+                        if val >= 5000.0:  # Reasonable minimum loan threshold
+                            principal = val
+                    except ValueError:
+                        pass
+
+        # Parse Tenure (years or months)
+        tenure = 36  # Default 36 months (3 years)
         yr_match = re.search(r'(\d+)\s*(?:year|yr|years)', q)
         mo_match = re.search(r'(\d+)\s*(?:month|mo|months)', q)
         if yr_match:
@@ -313,7 +351,7 @@ class CreditLoanAgent:
         elif mo_match:
             tenure = int(mo_match.group(1))
 
-        # Look for interest rate (e.g., 9.5%, 8 percent)
+        # Parse Interest Rate (e.g., 9.5%, 8.5 percent)
         interest = 10.0  # Default 10.0%
         rate_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:%|percent)', q)
         if rate_match:
@@ -326,21 +364,21 @@ class CreditLoanAgent:
         elig = data.get("eligibility")
 
         lines = [
-            f"📊 **Loan & EMI Calculation Summary**:\n",
-            f"- **Principal Amount**: ${emi_info['principal']:,.2f}",
-            f"- **Annual Interest Rate**: {emi_info['annual_interest_rate']}%",
+            f"📊 **Loan & Reducing-Balance EMI Summary (INR)**:\n",
+            f"- **Principal Amount**: {emi_info['formatted_principal']} ({format_inr_lakh_crore(emi_info['principal'])})",
+            f"- **Annual Interest Rate**: {emi_info['annual_interest_rate']}% p.a.",
             f"- **Tenure**: {emi_info['tenure_months']} months ({emi_info['tenure_months'] // 12} years)",
             f"- **Monthly EMI**: **{emi_info['formatted_emi']}**",
             f"- **Total Interest Payable**: {emi_info['formatted_total_interest']}",
-            f"- **Total Payment**: {emi_info['formatted_total_payment']}\n"
+            f"- **Total Repayment Amount**: {emi_info['formatted_total_payment']}\n"
         ]
 
         if elig:
             badge = "✅" if elig["status"] == "APPROVED" else ("⚠️" if elig["status"] == "CONDITIONALLY APPROVED" else "❌")
-            lines.append(f"🏦 **Underwriting Assessment**: {badge} **{elig['status']}**")
-            lines.append(f"- **Customer Credit Score**: {customer['credit_score']}")
-            lines.append(f"- **Monthly Income**: ${customer['monthly_income']:,.2f}")
-            lines.append(f"- **Projected Debt-To-Income (DTI)**: {elig['dti_ratio']}% (Policy benchmark <= 45%)")
+            lines.append(f"🏦 **Simulated Underwriting Assessment**: {badge} **{elig['status']}** *(Simulation)*")
+            lines.append(f"- **Customer CIBIL / Credit Score**: {customer['credit_score']}")
+            lines.append(f"- **Verified Monthly Income**: {format_inr(customer['monthly_income'])}")
+            lines.append(f"- **Projected FOIR / DTI**: {elig['dti_ratio']}% (Policy ceiling <= 45%)")
             for r in elig["reasons"]:
                 lines.append(f"  • {r}")
 
@@ -348,19 +386,22 @@ class CreditLoanAgent:
 
 
 class GeneralFaqAgent:
-    """Specialized Agent for general retail banking information and navigation."""
+    """Specialized Agent for general retail banking information in India (IFSC, DICGC, UPI)."""
     name = "General Banking/FAQ Agent"
-    description = "Provides retail banking assistance, operational hours, security policies, and routing numbers."
+    description = "Provides retail banking guidance on operational hours, IFSC codes, DICGC insurance, and UPI security."
 
     def execute(self, query: str, account_number: str, customer_info: Dict[str, Any], llm_status: Dict[str, Any]) -> Dict[str, Any]:
         trace_steps = [
-            "General FAQ Agent activated for general banking guidance.",
+            "General FAQ Agent activated for retail banking guidance in India.",
             "Invoking banking_tools.get_general_banking_faq()."
         ]
         tool_res = banking_tools.get_general_banking_faq(query)
 
         if llm_status["available"] and llm_status["model"]:
-            system_prompt = "You are a friendly retail banking support assistant. Answer the user's question clearly."
+            system_prompt = (
+                "You are a friendly Indian retail banking support assistant. Answer the user's question clearly. "
+                "Always use Indian Rupees (₹) where monetary amounts apply."
+            )
             prompt = f"Knowledge: {tool_res['answer']}\nUser Query: {query}"
             response_text = _call_ollama(prompt, system_prompt, llm_status["model"]) or tool_res["answer"]
         else:
@@ -369,6 +410,7 @@ class GeneralFaqAgent:
         return {
             "agent": self.name,
             "action": "faq_guidance",
+            "currency": "INR",
             "tool_data": tool_res,
             "response_text": response_text,
             "trace_steps": trace_steps,
@@ -400,19 +442,29 @@ class SupervisorAgent:
 
     def classify_intent(self, query: str, llm_status: Dict[str, Any]) -> Tuple[str, str, float]:
         """
-        Classify query intent.
+        Classify query intent with Indian banking vocabulary support.
         Returns: (intent_category, rationale, confidence)
         Categories: FRAUD_DETECTION, LOAN_CREDIT, CUSTOMER_BANKING, GENERAL_FAQ
         """
         q = query.lower()
 
-        # Deterministic rule keyword patterns
-        fraud_keywords = ["fraud", "suspicious", "flag", "unusual", "stolen", "hack", "scam", "audit", "alert", "weird", "compromised", "risk", "anomaly"]
-        loan_keywords = ["loan", "emi", "borrow", "interest", "eligible", "eligibility", "mortgage", "repay", "installment", "underwrite", "credit score"]
-        banking_keywords = ["balance", "funds", "how much money", "account", "transaction", "history", "statement", "spent", "statement", "deposit", "recent"]
-        faq_keywords = ["hour", "open", "close", "routing", "swift", "bic", "fdic", "insure", "branch", "help", "hello", "hi", "hey", "contact"]
+        fraud_keywords = [
+            "fraud", "suspicious", "flag", "unusual", "stolen", "hack", "scam", "audit", "alert",
+            "weird", "compromised", "risk", "anomaly", "unauthorized", "foreign"
+        ]
+        loan_keywords = [
+            "loan", "emi", "borrow", "interest", "eligible", "eligibility", "mortgage", "repay",
+            "installment", "underwrite", "credit score", "cibil", "lakh", "lakhs", "crore", "crores"
+        ]
+        banking_keywords = [
+            "balance", "funds", "how much money", "account", "transaction", "history", "statement",
+            "spent", "passbook", "deposit", "recent", "rupees", "inr"
+        ]
+        faq_keywords = [
+            "hour", "open", "close", "ifsc", "micr", "routing", "swift", "neft", "rtgs", "upi",
+            "dicgc", "fdic", "insure", "branch", "help", "hello", "hi", "hey", "contact"
+        ]
 
-        # 1. Fast Pattern Matching
         if any(w in q for w in fraud_keywords):
             return "FRAUD_DETECTION", "Keywords matched security, fraud detection, or suspicious activity.", 0.95
         if any(w in q for w in loan_keywords):
@@ -422,7 +474,6 @@ class SupervisorAgent:
         if any(w in q for w in faq_keywords):
             return "GENERAL_FAQ", "Keywords matched general retail banking guidance or FAQs.", 0.88
 
-        # If LLM is available and ambiguous, ask LLM
         if llm_status["available"] and llm_status["model"]:
             system_prompt = (
                 "You are an intent routing classifier for a banking multi-agent system. "
@@ -435,7 +486,6 @@ class SupervisorAgent:
                     if cat in raw.upper():
                         return cat, f"Classified by local LLM ({llm_status['model']}).", 0.90
 
-        # Default fallback
         return "CUSTOMER_BANKING", "Defaulted to customer account agent for general banking query.", 0.70
 
     def process_request(
@@ -448,12 +498,11 @@ class SupervisorAgent:
         1. Query analysis & intent classification
         2. Agent selection
         3. Specialized agent execution
-        4. Assembly of trace and structured response
+        4. Assembly of trace and structured response in INR
         """
         start_time = datetime.datetime.now()
         llm_status = check_ollama_availability()
 
-        # Retrieve customer account context
         account_info = database.get_account_by_number(account_number)
         if not account_info:
             return {
@@ -531,7 +580,7 @@ class SupervisorAgent:
         execution_trace.append({
             "step": len(execution_trace) + 1,
             "stage": "Response Finalization",
-            "detail": f"Response completed in {duration_ms}ms using {llm_status['mode']}."
+            "detail": f"Response completed in {duration_ms}ms using {llm_status['mode']} (INR / ₹)."
         })
 
         return {
@@ -539,6 +588,8 @@ class SupervisorAgent:
             "query": query,
             "account_number": account_number,
             "customer_name": customer_info["name"],
+            "currency": "INR",
+            "currency_symbol": "₹",
             "intent": intent,
             "selected_agent": selected_agent_name,
             "confidence": confidence,
